@@ -15,13 +15,15 @@ type Server interface {
 	http.Handler
 
 	//注册路由
-	AddRoute(method string, path string, handler HandleFunc)
+	addRoute(method string, path string, handler HandleFunc)
 
 	//控制生命周期
 	Start(addr string) error
 }
 
-type HTTPServer struct{}
+type HTTPServer struct {
+	router
+}
 
 func (h *HTTPServer) Start(addr string) error {
 	l, err := net.Listen("tcp", addr)
@@ -48,23 +50,20 @@ func (h *HTTPServer) serve(ctx *Context) {
 }
 
 // AddRoute 核心API
-func (h *HTTPServer) AddRoute(method string, path string, handler HandleFunc) {
-	panic("implement me")
-}
 
 func (h *HTTPServer) Get(path string, handler HandleFunc) {
-	h.AddRoute(http.MethodGet, path, handler)
+	h.addRoute(http.MethodGet, path, handler)
 }
 
 func (h *HTTPServer) Post(path string, handler HandleFunc) {
-	h.AddRoute(http.MethodPost, path, handler)
+	h.addRoute(http.MethodPost, path, handler)
 }
 
 func (h *HTTPServer) Delete(path string, handler HandleFunc) {
-	h.AddRoute(http.MethodDelete, path, handler)
+	h.addRoute(http.MethodDelete, path, handler)
 }
 func (h *HTTPServer) Options(path string, handler HandleFunc) {
-	h.AddRoute(http.MethodOptions, path, handler)
+	h.addRoute(http.MethodOptions, path, handler)
 }
 
 type HandleFunc func(ctx *Context)
