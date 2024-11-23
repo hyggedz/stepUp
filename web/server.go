@@ -25,6 +25,12 @@ type HTTPServer struct {
 	router
 }
 
+func NewHTTPServer() *HTTPServer {
+	return &HTTPServer{
+		router: NewRouter(),
+	}
+}
+
 func (h *HTTPServer) Start(addr string) error {
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -41,12 +47,20 @@ func (h *HTTPServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Resp: w,
 	}
 	//注册路由
+
 	h.serve(ctx)
 }
 
-// serve 注册路由
 func (h *HTTPServer) serve(ctx *Context) {
+	info, ok := h.findRoute(ctx.Req.Method, ctx.Req.URL.Path)
+	if !ok || info.n.handler == nil {
+		ctx.Resp.WriteHeader(404)
+		_, _ = ctx.Resp.Write([]byte("NOT FOUND"))
+		return
+	}
 
+	ctx.PathParams = info.pathParams
+	info.n.handler(ctx)
 }
 
 // AddRoute 核心API

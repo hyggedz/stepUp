@@ -33,6 +33,22 @@ func TestRouter_AddRoute(t *testing.T) {
 			method: http.MethodPost,
 			path:   "/login",
 		},
+		{
+			method: http.MethodPost,
+			path:   "/user/*",
+		},
+		{
+			method: http.MethodGet,
+			path:   "/*",
+		},
+		{
+			method: http.MethodGet,
+			path:   "/*/*",
+		},
+		{
+			method: http.MethodGet,
+			path:   "/user/:id",
+		},
 	}
 
 	r := NewRouter()
@@ -56,6 +72,10 @@ func TestRouter_AddRoute(t *testing.T) {
 								handler: mockHandler,
 							},
 						},
+						paramChild: &node{
+							path:    ":id",
+							handler: mockHandler,
+						},
 					},
 					"order": &node{
 						path: "order",
@@ -67,6 +87,10 @@ func TestRouter_AddRoute(t *testing.T) {
 						},
 					},
 				},
+				starChild: &node{
+					path:    "*",
+					handler: mockHandler,
+				},
 			},
 			http.MethodPost: &node{
 				path: "/",
@@ -74,6 +98,13 @@ func TestRouter_AddRoute(t *testing.T) {
 					"login": &node{
 						path:    "login",
 						handler: mockHandler,
+					},
+					"user": &node{
+						path: "user",
+						starChild: &node{
+							path:    "*",
+							handler: mockHandler,
+						},
 					},
 				},
 			},
@@ -108,6 +139,16 @@ func TestRouter_AddRoute(t *testing.T) {
 	assert.Panicsf(t, func() {
 		r.addRoute(http.MethodGet, "/", mockHandler)
 	}, "路由冲突，重复注册[/]")
+
+	r.addRoute(http.MethodGet, "/order/:username", mockHandler)
+	assert.Panicsf(t, func() {
+		r.addRoute(http.MethodGet, "/order/*", mockHandler)
+	}, "web:非法路由，已有路径参数路由。不允许同时注册通配符路由和参数路由[/order/*]")
+
+	r.addRoute(http.MethodPost, "/order/*", mockHandler)
+	assert.Panicsf(t, func() {
+		r.addRoute(http.MethodPost, "/order/:username", mockHandler)
+	}, "web:非法路由，已有路径参数路由。不允许同时注册通配符路由和参数路由[/order/:username]")
 }
 
 func (r router) equal(y router) (string, bool) {
@@ -186,6 +227,14 @@ func Test_router_findRoute(t *testing.T) {
 			method: http.MethodPost,
 			path:   "/login",
 		},
+		{
+			method: http.MethodGet,
+			path:   "/user/*",
+		},
+		{
+			method: http.MethodOptions,
+			path:   "/user/:username",
+		},
 	}
 
 	r := NewRouter()
@@ -201,7 +250,7 @@ func Test_router_findRoute(t *testing.T) {
 		path   string
 
 		wantFound bool
-		wantNode  *node
+		wantInfo  *matchInfo
 	}{
 		{
 			name:   "method not found",
@@ -209,16 +258,18 @@ func Test_router_findRoute(t *testing.T) {
 			path:   "/order/detail",
 
 			wantFound: false,
-			wantNode:  nil,
+			wantInfo:  nil,
 		},
 		{
 			name:   "完全命中",
 			method: http.MethodGet,
 			path:   "/order/detail",
 
-			wantNode: &node{
-				path:    "detail",
-				handler: mockHandler,
+			wantInfo: &matchInfo{
+				n: &node{
+					path:    "detail",
+					handler: mockHandler,
+				},
 			},
 			wantFound: true,
 		},
@@ -228,12 +279,14 @@ func Test_router_findRoute(t *testing.T) {
 			path:   "/order",
 
 			wantFound: true,
-			wantNode: &node{
-				path: "order",
-				children: map[string]*node{
-					"detail": &node{
-						path:    "detail",
-						handler: mockHandler,
+			wantInfo: &matchInfo{
+				n: &node{
+					path: "order",
+					children: map[string]*node{
+						"detail": &node{
+							path:    "detail",
+							handler: mockHandler,
+						},
 					},
 				},
 			},
@@ -251,23 +304,64 @@ func Test_router_findRoute(t *testing.T) {
 			path:   "/",
 
 			wantFound: true,
-			wantNode: &node{
-				path:    "/",
-				handler: mockHandler,
+			wantInfo: &matchInfo{
+				n: &node{
+					path:    "/",
+					handler: mockHandler,
+				},
+			},
+		},
+		{
+			name: "user abc",
+
+			method: http.MethodGet,
+			path:   "/user/abc",
+
+			wantFound: true,
+			wantInfo: &matchInfo{
+				n: &node{
+					path:    "*",
+					handler: mockHandler,
+				},
+			},
+		},
+		{
+			name: "user * *",
+
+			method: http.MethodGet,
+			path:   "/user/abc/aaa",
+
+			wantFound: false,
+			wantInfo: &matchInfo{
+				n: nil,
+			},
+		},
+		{
+			name: "user :username",
+
+			method: http.MethodOptions,
+			path:   "/user/xyz",
+
+			wantFound: true,
+			wantInfo: &matchInfo{
+				n: &node{
+					path:    ":username",
+					handler: mockHandler,
+				},
 			},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			n, found := r.findRoute(tc.method, tc.path)
+			info, found := r.findRoute(tc.method, tc.path)
 			assert.Equal(t, tc.wantFound, found)
 
 			if !found {
 				return
 			}
 
-			msg, ok := n.equal(tc.wantNode)
+			msg, ok := info.n.equal(tc.wantInfo.n)
 			assert.True(t, ok, msg)
 		})
 	}
