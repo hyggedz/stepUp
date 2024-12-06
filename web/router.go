@@ -33,6 +33,9 @@ type node struct {
 	//当前路径
 	path string
 
+	//到当前节点的路由
+	route string
+
 	//子节点path => 子节点
 	children map[string]*node
 
@@ -106,6 +109,7 @@ func (r *router) addRoute(method string, path string, handler HandleFunc) {
 		panic(fmt.Sprintf("web: 路由冲突[%s]", path))
 	}
 	root.handler = handler
+	root.route = path
 }
 
 func (n *node) childOrCreate(path string) *node {

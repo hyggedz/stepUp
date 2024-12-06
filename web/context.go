@@ -15,6 +15,12 @@ type Context struct {
 	//把查询参数缓存住
 	//queryValues caches query parameters
 	queryValues url.Values
+
+	//命中路由
+	MatchRoute string
+
+	RespStatusCode int
+	RespData       []byte
 }
 
 func (c *Context) BindJSON(val any) error {

@@ -1,6 +1,8 @@
 package web
 
 import (
+	"fmt"
+	"log"
 	"net"
 	"net/http"
 )
@@ -23,11 +25,29 @@ type Server interface {
 
 type HTTPServer struct {
 	router
+	mdl []Middleware
+
+	log func(msg string, args ...any)
 }
 
-func NewHTTPServer() *HTTPServer {
-	return &HTTPServer{
+type HTTPServerOption func(server *HTTPServer)
+
+func NewHTTPServer(opts ...HTTPServerOption) *HTTPServer {
+	res := &HTTPServer{
 		router: NewRouter(),
+		log: func(msg string, args ...any) {
+			fmt.Printf(msg, args...)
+		},
+	}
+	for _, opt := range opts {
+		opt(res)
+	}
+	return res
+}
+
+func ServerWithMiddleware(mdls ...Middleware) HTTPServerOption {
+	return func(server *HTTPServer) {
+		server.mdl = mdls
 	}
 }
 
@@ -48,7 +68,20 @@ func (h *HTTPServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	//注册路由
 
-	h.serve(ctx)
+	root := h.serve
+	//AOP
+	for i := len(h.mdl) - 1; i >= 0; i-- {
+		root = h.mdl[i](root)
+	}
+
+	var m Middleware = func(next HandleFunc) HandleFunc {
+		return func(ctx *Context) {
+			next(ctx)
+			h.flashResp(ctx)
+		}
+	}
+	root = m(root)
+	root(ctx)
 }
 
 func (h *HTTPServer) serve(ctx *Context) {
@@ -60,10 +93,17 @@ func (h *HTTPServer) serve(ctx *Context) {
 	}
 
 	ctx.PathParams = info.pathParams
+	ctx.MatchRoute = info.n.route
 	info.n.handler(ctx)
 }
 
-// AddRoute 核心API
+func (h *HTTPServer) Use(mdl ...Middleware) {
+	if h.mdl == nil {
+		h.mdl = mdl
+		return
+	}
+	h.mdl = append(h.mdl, mdl...)
+}
 
 func (h *HTTPServer) Get(path string, handler HandleFunc) {
 	h.addRoute(http.MethodGet, path, handler)
@@ -78,6 +118,16 @@ func (h *HTTPServer) Delete(path string, handler HandleFunc) {
 }
 func (h *HTTPServer) Options(path string, handler HandleFunc) {
 	h.addRoute(http.MethodOptions, path, handler)
+}
+
+func (s *HTTPServer) flashResp(ctx *Context) {
+	if ctx.RespStatusCode > 0 {
+		ctx.Resp.WriteHeader(ctx.RespStatusCode)
+	}
+	_, err := ctx.Resp.Write(ctx.RespData)
+	if err != nil {
+		log.Fatalln("回写响应失败", err)
+	}
 }
 
 type HandleFunc func(ctx *Context)
