@@ -28,6 +28,8 @@ type HTTPServer struct {
 	mdl []Middleware
 
 	log func(msg string, args ...any)
+
+	tplEngine TemplateEngine
 }
 
 type HTTPServerOption func(server *HTTPServer)
@@ -43,6 +45,12 @@ func NewHTTPServer(opts ...HTTPServerOption) *HTTPServer {
 		opt(res)
 	}
 	return res
+}
+
+func ServerWithTemplateEngine(tplEngine TemplateEngine) HTTPServerOption {
+	return func(server *HTTPServer) {
+		server.tplEngine = tplEngine
+	}
 }
 
 func ServerWithMiddleware(mdls ...Middleware) HTTPServerOption {
@@ -63,8 +71,9 @@ func (h *HTTPServer) Start(addr string) error {
 func (h *HTTPServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//注册上下文
 	ctx := &Context{
-		Req:  r,
-		Resp: w,
+		Req:       r,
+		Resp:      w,
+		tplEngine: h.tplEngine,
 	}
 	//注册路由
 

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -21,6 +22,19 @@ type Context struct {
 
 	RespStatusCode int
 	RespData       []byte
+
+	tplEngine TemplateEngine
+}
+
+func (c *Context) Render(tplName string, data any) error {
+	var err error
+	c.RespData, err = c.tplEngine.Render(context.Background(), tplName, data)
+	if err != nil {
+		c.RespStatusCode = http.StatusInternalServerError
+		return err
+	}
+	c.RespStatusCode = http.StatusOK
+	return nil
 }
 
 func (c *Context) BindJSON(val any) error {
